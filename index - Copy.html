@@ -1,0 +1,287 @@
+﻿<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+    <meta name="description" content="" />
+    <meta name="author" content="" />
+
+    <title>CHAT4U</title>
+    <!-- BOOTSTRAP CORE STYLE CSS -->
+    <link href="css/bootstrap.css" rel="stylesheet" />
+    <link href="emoji/jquery.emojiarea.css" rel="stylesheet" />
+    <link href="emoji/style.css" rel="stylesheet" />
+
+    <script src='https://ajax.googleapis.com/ajax/libs/jquery/1.9.0/jquery.min.js'></script>
+    <script src="emoji/jquery.emojiarea.js"></script>
+    <script src="emoji/img/emojis.js"></script>
+    <script src="https://cdn.firebase.com/js/client/2.0.5/firebase.js"></script>
+</head>
+
+<body style="font-family:Verdana">
+    <div class="container" id="firechat-wrapper">
+        <div class="row" style="padding-top:40px;">
+            <h3 class="text-center"> CHAT4U </h3>
+            <br /><br />
+            <div class="col-md-12">
+                <div class="panel panel-info">
+                    <div class="panel-heading">
+                        RECENT CHAT HISTORY
+                        <br />
+                        <br />
+                        Tips:<br />
+                        <b>s <u>keyword</u></b>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ==>  Google web search based on <u>keyword</u><br />
+                        <b>s img <u>keyword</u></b> ==> Google image serach based on <u>keyword</u><br />
+                    </div>
+                    <div class="panel-body">
+                        <ul class="media-list example-chat-messages" id="example-messages"></ul>
+                    </div>
+                    <div class="panel-footer">
+                        <button class="btn btn-info" type="button" id='btnSend' style="float: right">SEND</button>
+                        <div style="overflow: hidden; padding-right: .5em;">
+                            <textarea rows="5" class="emojis-wysiwyg" placeholder="Enter Message" id="emoji-txt" style="width: 100%;"></textarea>
+                        </div>
+
+                        <div class="input-group"  style="display:none;">
+                                <h3>Value:</h3>
+                                <div class="value"><pre id="emojis-wysiwyg-value"></pre></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+        // REGISTER DOM ELEMENTS
+        var fbid = '';
+        var imgclass = '';
+        var divdir = '';
+        var messageField = $('#emoji-txt');
+        var messageList = $('#example-messages');
+        var lastfid = '1';
+        var lastdir = 'L';
+        var newdir = 'L';
+        var authUserName = '';
+
+        //************************* Emojis ********************************
+        //*****************************************************************
+        var $wysiwyg = $('.emojis-wysiwyg').emojiarea({ wysiwyg: true });
+        var $wysiwyg_value = $('#emojis-wysiwyg-value');
+
+        $wysiwyg.on('change', function () {
+            $wysiwyg_value.text($(this).val());
+        });
+        $wysiwyg.trigger('change');
+        //****************************************************************
+
+        $("#firechat-wrapper").hide();
+        // CREATE A REFERENCE TO FIREBASE (Messages)
+        var refMessages = new Firebase("https://chat4u.firebaseio.com/Messages");
+        // CREATE A REFERENCE TO FIREBASE (Users)
+        var refUsers = new Firebase("https://chat4u.firebaseio.com/Users");
+
+
+        // prefer pop-ups, so we don't navigate away from the page
+        refMessages.authWithOAuthPopup("facebook", function (err, authData) {
+            if (err) {
+                if (err.code === "TRANSPORT_UNAVAILABLE") {
+                    // fall-back to browser redirects, and pick up the session
+                    // automatically when we come back to the origin page
+                    refMessages.authWithOAuthRedirect("facebook", function (err, authData) { });
+                }
+            } else if (authData) {
+                if (authData) {
+                    $("#firechat-wrapper").show();
+                    authUserName = authData.facebook.displayName;
+                    fbid = authData.facebook.id;
+
+                    //*************************************************
+                    //Save the user's profile into Firebase so we can list users,
+                    //Use them in Security and Firebase Rules, and show profiles
+                    //ref.child('users').child(authData.uid).set(authData);
+                    refUsers.child(authData.uid).set(authData);
+                    //*************************************************
+                    //Get the bg color of last submitted text message based on fabebook id in firebase.
+                    //*************************************************
+                    getLastBgColor(fbid);
+                    //*************************************************
+                    //Get the last submitted text message direction in firebase.
+                    //*************************************************
+                    getLastDirection();
+                    //*************************************************
+
+                    // Add a callback that is triggered for each chat message.
+                    refMessages.limitToLast(10).on('child_added', function (snapshot) {
+
+                        //GET DATA
+                        var data = snapshot.val();
+                        var fbid_d = data.fbid;
+                        var username_d = data.name;
+                        var message_d = data.text;
+                        var dir_d = data.dir;
+                        var date_d = data.currentdate;
+                        var bgcolor_d = data.bgcolor;
+                        var strProfilePic = "https://graph.facebook.com/" + fbid_d + "/picture";
+
+                        if (dir_d) {
+                            imgclass = dir_d == "R" ? "pull-right" : "pull-left";
+                            divdir = dir_d == "R" ? "divTxtR" : "divTxtL";
+                        }
+
+                        //CREATE ELEMENTS MESSAGE & SANITIZE TEXT
+                        var messageElement = $("<li class='media' f='" + fbid_d + "'>");
+                        var divmediabody = $("<div class='media-body'>");
+                        var divmedia = $("<div class='media'>");
+                        var a = $("<a class='" + imgclass + "' href='#'><img class='media-object img-circle' src='" + strProfilePic + "' /></a>");
+                        var divmediabody2 = $("<div class='media-body " + divdir + "'>");
+                        divmediabody2.css('background', bgcolor_d);
+                        messageElement.append(divmediabody);
+                        divmediabody.append(divmedia);
+                        divmedia.append(a);
+                        divmedia.append(divmediabody2);
+
+                        var usernamediv = $("<small class='text-muted'>");
+                        divmediabody2.html(message_d);
+
+                        divmediabody2.append(usernamediv);
+                        usernamediv.html("<br />" + date_d);
+
+                        //ADD MESSAGE
+                        messageList.append(messageElement);
+
+                    });
+
+                }
+                else {
+                    refMessages.authAnonymously(function (error, authData) {
+                        if (error) {
+                            console.log(error);
+                        }
+                    });
+                }//if
+            }
+        });
+
+
+        // LISTEN FOR KEYPRESS EVENT
+        messageField.keypress(function (e) {
+           if (e.keyCode == 13) {
+                pushData();
+            }
+        });
+
+        $("#btnSend").click(function () {
+            pushData();
+        });
+
+
+        function pushData() {
+
+            //FIELD VALUES
+            var username = authUserName;
+            var message = $(".emoji-wysiwyg-editor").html();
+            //Clientside Datetime
+            var cdate = new Date();
+
+            //***********************************************************
+            //Set current text message direction to push it to firebase.
+            //***********************************************************
+            getLastDirection();
+            lastdir = $('#hf_lastdir').val();
+            lastfid = $('#hf_lastfid').val();
+
+            if (lastfid != fbid) {
+                newdir = lastdir == "L" ? "R" : "L";
+            }
+            else {
+                newdir = lastdir;
+            }
+            //***********************************************************
+            bgcolor = $('#hf_bgcolor').val();
+            if (!bgcolor) {
+                //Generate random color to set the background color of the text body.
+                var back = ["#dbeef3", "#f2dcdb", "#fac08f", "#ccc1d9", "#c4bd97"];
+                bgcolor = back[Math.floor(Math.random() * back.length)];
+            }
+
+            //***********************************************************
+            // Google search functionality
+            //***********************************************************
+            var keyword = '';
+            var bSearchImg = false;
+            var _url = 'https://ajax.googleapis.com/ajax/services/search/web?v=1.0&q=';
+            if (message.toLowerCase().match('^s ') ) {
+                keyword = message.substring(2, message.length);
+                _url = _url + keyword
+            }
+            if (message.toLowerCase().match('^s img ')) {
+                keyword = message.substring(6, message.length);
+                _url = 'https://ajax.googleapis.com/ajax/services/search/images?v=1.0&q=' + keyword;
+                bSearchImg = true;
+            }
+
+            if (keyword.length > 0) {
+                $.ajax({
+                    url: _url,
+                    type: "GET",
+                    dataType: 'jsonp',
+                    async: 'true',
+                    success: function (data) {
+                        var strResult = '';
+                        if (!bSearchImg) {
+                            $.each(data.responseData.results, function (i, rows) {
+                                strResult = strResult + rows.title + "<br/>" + "<a href='" + rows.url + "' target='_blank'>" + rows.url + "</a>" + "<br/><br/>";
+                            });
+                        }
+                        else
+                        {
+                            $.each(data.responseData.results, function (i, rows) {
+                                strResult = strResult + rows.title + "<br/>" + "<a href='" + rows.url + "' target='_blank'><img src='" + rows.url + "' height='100' width='100'></img></a>" + "<br/><br/>";
+                            });
+                        }
+
+                        message = message + "<br/>" + strResult;
+                        //SAVE DATA TO FIREBASE.
+                        refMessages.push({ name: username, text: message, fbid: fbid, bgcolor: bgcolor, currentdate: cdate.toLocaleString(), dir: newdir });
+                    }
+                });
+
+            }
+            else {
+                //SAVE DATA TO FIREBASE.
+                refMessages.push({ name: username, text: message, fbid: fbid, bgcolor: bgcolor, currentdate: cdate.toLocaleString(), dir: newdir });
+            }
+            
+            $(".emoji-wysiwyg-editor").html('');
+
+        }
+
+        //**********************************************************************************
+        //Get the bg color of last submitted text message based on fabebook id in firebase.
+        //**********************************************************************************
+        function getLastBgColor(vfbid) {
+            refMessages.orderByChild('fbid').equalTo(vfbid).limitToLast(1).on('child_added', function (snapshot) {
+                var data = snapshot.val();
+                $('#hf_bgcolor').val(data.bgcolor);
+            });
+
+        }
+
+        //***********************************************************
+        //Get the last submitted text message direction in firebase.
+        //***********************************************************
+        function getLastDirection() {
+            refMessages.limitToLast(1).on('child_added', function (snapshot) {
+                var data = snapshot.val();
+                $('#hf_lastfid').val(data.fbid);
+                $('#hf_lastdir').val(data.dir);
+            });
+        }
+
+
+    </script>
+    <input type="hidden" value="" id='hf_bgcolor'>
+    <input type="hidden" value="" id='hf_lastfid'>
+    <input type="hidden" value="" id='hf_lastdir'>
+</body>
+</html>
